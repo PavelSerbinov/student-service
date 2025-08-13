@@ -8,23 +8,24 @@ import ait.cohort55.student.dto.StudentUpdateDto;
 import ait.cohort55.student.dto.exceptions.StudentNotFoundException;
 import ait.cohort55.student.model.Student;
 import lombok.RequiredArgsConstructor;
+import org.modelmapper.ModelMapper;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Set;
-import java.util.stream.StreamSupport;
 
 @Service
 @RequiredArgsConstructor
 public class StudentServiceImpl implements StudentService {
     private final StudentRepository studentRepository;
+    private final ModelMapper modelMapper;
 
     @Override
     public Boolean addStudent(StudentAddDto studentAddDto) {
-        if (studentRepository.findById(studentAddDto.getId()).isPresent()) {
+        if (studentRepository.existsById(studentAddDto.getId())) {
             return false;
         }
-        Student student = new Student(studentAddDto.getId(), studentAddDto.getName(), studentAddDto.getPassword());
+        Student student = modelMapper.map(studentAddDto, Student.class);
         studentRepository.save(student);
         return true;
     }
@@ -32,14 +33,14 @@ public class StudentServiceImpl implements StudentService {
     @Override
     public StudentDto findStudent(Long id) {
         Student student = studentRepository.findById(id).orElseThrow(StudentNotFoundException::new);
-        return new StudentDto(student.getId(), student.getName(), student.getScores());
+        return modelMapper.map(student, StudentDto.class);
     }
 
     @Override
     public StudentDto removeStudent(Long id) {
         Student student = studentRepository.findById(id).orElseThrow(StudentNotFoundException::new);
         studentRepository.deleteById(id);
-        return new StudentDto(id, student.getName(), student.getScores());
+        return modelMapper.map(student, StudentDto.class);
     }
 
     @Override
@@ -51,35 +52,34 @@ public class StudentServiceImpl implements StudentService {
         if (studentUpdateDto.getPassword() != null) {
             student.setPassword(studentUpdateDto.getPassword());
         }
-        return new StudentAddDto(student.getId(), student.getName(), student.getPassword());
+        studentRepository.save(student);
+        return modelMapper.map(student, StudentAddDto.class);
     }
 
     @Override
     public Boolean addScore(Long id, ScoreDto scoreDto) {
         Student student = studentRepository.findById(id).orElseThrow(StudentNotFoundException::new);
-        return student.addScore(scoreDto.getExamName(), scoreDto.getScore());
+        boolean res = student.addScore(scoreDto.getExamName(), scoreDto.getScore());
+        studentRepository.save(student);
+        return res;
     }
 
     @Override
     public List<StudentDto> findStudentsByName(String name) {
-        return StreamSupport.stream(studentRepository.findAll().spliterator(), false)
-                .filter(s -> name.equalsIgnoreCase(s.getName()))
-                .map(s -> new StudentDto(s.getId(), s.getName(), s.getScores()))
+        return studentRepository.findByNameIgnoreCase(name)
+                .map(s -> modelMapper.map(s, StudentDto.class))
                 .toList();
     }
 
     @Override
     public Long getStudentsQuantityByNames(Set<String> names) {
-        return StreamSupport.stream(studentRepository.findAll().spliterator(), false)
-                .filter(s -> names.contains(s.getName()))
-                .count();
+        return studentRepository.countByNameInIgnoreCase(names);
     }
 
     @Override
     public List<StudentDto> findStudentsByExamNameMinScore(String exam, Integer minScore) {
-        return StreamSupport.stream(studentRepository.findAll().spliterator(), false)
-                .filter(s -> s.getScores().containsKey(exam) && s.getScores().get(exam) > minScore)
-                .map(s -> new StudentDto(s.getId(), s.getName(), s.getScores()))
+        return studentRepository.findByExamAndScoreGreaterThan(exam, minScore)
+                .map(s -> modelMapper.map(s, StudentDto.class))
                 .toList();
     }
 }
